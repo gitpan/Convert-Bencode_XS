@@ -10,9 +10,9 @@ if (-t and not @ARGV) {
     exit;
 }
 
-our ($data, $result);
-
 our $data = do {local $/; <>};
+
+our $result;
 
 cmpthese(-10, {
     Bencode_XS  =>  sub {$result = Convert::Bencode_XS::bdecode($data)},

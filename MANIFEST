@@ -5,5 +5,6 @@ extras/bench_encode.pl
 lib/Convert/Bencode_XS.pm
 Makefile.PL
 MANIFEST
+META.yml
 README
 t/001_tests.t

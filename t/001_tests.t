@@ -1,6 +1,6 @@
 # -*- perl -*-
 
-# t/001_basic.t - check to make sure its all working
+# t/001_tests.t - check to make sure its all working
 
 use Test::More tests => 75;
 

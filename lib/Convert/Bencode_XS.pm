@@ -8,13 +8,13 @@ use Carp;
 
 use base qw(Exporter DynaLoader);
 
-our @EXPORT_OK = qw(bencode bdecode cleanse $COERCE);
+our @EXPORT_OK = qw(&bencode &bdecode &cleanse $COERCE);
 our %EXPORT_TAGS = (
     all     => \@EXPORT_OK,
-    code    =>  [qw(bencode bdecode)],
+    code    =>  [qw(&bencode &bdecode)],
 );
 
-our $VERSION = '0.01';
+our $VERSION = '0.02';
 
 __PACKAGE__->bootstrap($VERSION);
 
@@ -216,8 +216,6 @@ programming.
 
 - Sorts hashes keys using "cmp" where the protocol says they should be
 "sorted as raw strings, not alphanumerics". I'm not sure what it means though.
-
-- Produce a warning (don't know why yet)
 
 Next comes not real BUGS but more liberal interpretation of the protocol:
 

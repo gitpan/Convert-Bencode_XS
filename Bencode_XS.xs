@@ -109,6 +109,7 @@ bencode(stuff)
     PREINIT:
         SV *line = newSV(8100);
     CODE:
+        sv_setpv(line, "");
         _bencode(
             line, 
             stuff, 
