@@ -107,7 +107,7 @@ ok($@, "we should croak here: invalid format");
 
 SKIP: {
     #we use Storable so we do not rely on bencode
-    eval q{use Storable qw(freeze thaw)}; 
+    eval q{use Storable qw(freeze)}; 
     skip "Storable not available", 12 if $@;
     local $Convert::Bencode_XS::COERCE = 0;
     is( freeze(bdecode('le')), freeze([]) );

@@ -3,10 +3,12 @@ package Convert::Bencode_XS;
 use 5.006;
 use strict;
 
-use Exporter();
-use Carp;
+our $VERSION = '0.03';
 
+use Carp;
 use base qw(Exporter DynaLoader);
+
+__PACKAGE__->bootstrap($VERSION);
 
 our @EXPORT_OK = qw(&bencode &bdecode &cleanse $COERCE);
 our %EXPORT_TAGS = (
@@ -14,11 +16,8 @@ our %EXPORT_TAGS = (
     code    =>  [qw(&bencode &bdecode)],
 );
 
-our $VERSION = '0.02';
-
-__PACKAGE__->bootstrap($VERSION);
-
 our $COERCE = 1;
+
 
 sub bdecode {
     local $_ = shift;
@@ -214,10 +213,7 @@ programming.
 
 - No detection of recursive references yet
 
-- Sorts hashes keys using "cmp" where the protocol says they should be
-"sorted as raw strings, not alphanumerics". I'm not sure what it means though.
-
-Next comes not real BUGS but more liberal interpretation of the protocol:
+Next come not real BUGS but more liberal interpretation of the protocol:
 
 - Hashes keys are forced to be strings. So if we find a number we don't
 croak, but we use it as a string.

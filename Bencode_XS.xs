@@ -2,6 +2,29 @@
 #include "perl.h"
 #include "XSUB.h"
 
+/* this is a trimmed down version of Perl_sv_cmp which doesn't consider
+ * locale and UTF8: i hope this to be  more compliant with Bencode specs  */
+int _raw_cmp(const void *v1, const void *v2) {
+    STRLEN cur1, cur2;
+    char *pv1, *pv2;
+    int cmp;
+        
+    pv1 = SvPV(*(SV **)v1, cur1);
+    pv2 = SvPV(*(SV **)v2, cur2); 
+    
+    int retval = memcmp((void*)pv1, (void*)pv2, cur1 < cur2 ? cur1 : cur2);
+    if (retval) {
+        cmp = retval < 0 ? -1 : 1;
+    } else if (cur1 == cur2) {
+        cmp = 0;
+    } else {
+        cmp = cur1 < cur2 ? -1 : 1;
+    }
+
+    return cmp;
+}
+
+
 bool _is_int(char *pv, STRLEN len, STRLEN *offset) {
     STRLEN i = 0;
     bool is_int = 0;
@@ -35,11 +58,13 @@ bool _is_int(char *pv, STRLEN len, STRLEN *offset) {
     }
 }
 
+
+
 void _bencode(SV *line, SV *stuff, bool coerce, bool hkey) {
     char *pv;
-    STRLEN len;
+    STRLEN len, offset;
     bool is_int = 0;
-    STRLEN offset;
+    
     if (hkey) {
         pv = SvPV(stuff, len);
         sv_catpvf(line, "%d:%s", len, pv);
@@ -56,7 +81,7 @@ void _bencode(SV *line, SV *stuff, bool coerce, bool hkey) {
             SV *sv; 
             HE *entry; 
             I32 len, i;
-            case 10:
+            case SVt_PVAV:
                 sv_catpv(line, "l");
                 av = (AV*)SvRV(stuff);
                 len = av_len(av) + 1;
@@ -65,7 +90,7 @@ void _bencode(SV *line, SV *stuff, bool coerce, bool hkey) {
                 }
                 sv_catpv(line, "e");
                 break;
-            case 11:
+            case SVt_PVHV:
                 sv_catpv(line, "d");
                 hv = (HV*)SvRV(stuff);
                 keys = (AV*)sv_2mortal((SV*)newAV());
@@ -75,7 +100,7 @@ void _bencode(SV *line, SV *stuff, bool coerce, bool hkey) {
                     (void)SvREFCNT_inc(sv);
                     av_push(keys, sv);
                 }
-                sortsv(AvARRAY(keys), av_len(keys) + 1, Perl_sv_cmp);
+                qsort(AvARRAY(keys), av_len(keys) + 1, sizeof(SV*), _raw_cmp);
                 len = av_len(keys) + 1;
                 for (i = 0; i < len; i++) {
                     sv = *av_fetch(keys, i, 0);
