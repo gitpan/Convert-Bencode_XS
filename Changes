@@ -1,5 +1,9 @@
 Revision history for Perl extension Convert::Bencode_XS.
 
+0.04  Tue Nov 15 14:47:00 JST 2005
+    - small changes in Bencode_XS.xs helps compiling under MSVSC
+        (thanx to Nilson Santos Figueiredo Junior nilsonsfj@cpan.org)
+
 0.03  Mon Nov  3 18:15:38 CET 2003
     - we use qsort instead of sortsv 
         (apparent speedup and should compile on 5.6)

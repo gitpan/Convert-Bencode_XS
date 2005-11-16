@@ -7,12 +7,12 @@
 int _raw_cmp(const void *v1, const void *v2) {
     STRLEN cur1, cur2;
     char *pv1, *pv2;
-    int cmp;
+    int cmp, retval;
         
     pv1 = SvPV(*(SV **)v1, cur1);
     pv2 = SvPV(*(SV **)v2, cur2); 
     
-    int retval = memcmp((void*)pv1, (void*)pv2, cur1 < cur2 ? cur1 : cur2);
+    retval = memcmp((void*)pv1, (void*)pv2, cur1 < cur2 ? cur1 : cur2);
     if (retval) {
         cmp = retval < 0 ? -1 : 1;
     } else if (cur1 == cur2) {

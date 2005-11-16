@@ -1,4 +1,4 @@
-Convert-Bencode_XS version 0.03
+Convert-Bencode_XS version 0.04
 ===============================
 
 This module provide fast conversion functions to/from the Bencode format.
