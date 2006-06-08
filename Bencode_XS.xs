@@ -4,7 +4,7 @@
 
 /* this is a trimmed down version of Perl_sv_cmp which doesn't consider
  * locale and UTF8: i hope this to be  more compliant with Bencode specs  */
-int _raw_cmp(const void *v1, const void *v2) {
+static int _raw_cmp(const void *v1, const void *v2) {
     STRLEN cur1, cur2;
     char *pv1, *pv2;
     int cmp, retval;
@@ -25,7 +25,7 @@ int _raw_cmp(const void *v1, const void *v2) {
 }
 
 
-bool _is_int(char *pv, STRLEN len, STRLEN *offset) {
+static bool _is_int(char *pv, STRLEN len, STRLEN *offset) {
     STRLEN i = 0;
     bool is_int = 0;
     bool first_zero = 0;
@@ -58,12 +58,9 @@ bool _is_int(char *pv, STRLEN len, STRLEN *offset) {
     }
 }
 
-
-
-void _bencode(SV *line, SV *stuff, bool coerce, bool hkey) {
+static void _bencode(SV *line, SV *stuff, bool coerce, bool hkey) {
     char *pv;
     STRLEN len, offset;
-    bool is_int = 0;
     
     if (hkey) {
         pv = SvPV(stuff, len);
@@ -95,7 +92,7 @@ void _bencode(SV *line, SV *stuff, bool coerce, bool hkey) {
                 hv = (HV*)SvRV(stuff);
                 keys = (AV*)sv_2mortal((SV*)newAV());
                 (void)hv_iterinit(hv);
-                while (entry = hv_iternext(hv)) {
+                while ((entry = hv_iternext(hv))) {
                     sv = hv_iterkeysv(entry);
                     (void)SvREFCNT_inc(sv);
                     av_push(keys, sv);
@@ -124,6 +121,179 @@ void _bencode(SV *line, SV *stuff, bool coerce, bool hkey) {
     }
 }
 
+/* Decode XS implementation by Andrew Danforth <adanforth@gmail.com>, 
+ * based entirely upon the Perl implementation by Giulio Motta */
+
+struct decode_stack_entry {
+   SV *sv;
+   SV *key;
+};
+
+struct decode {
+   struct decode_stack_entry *stack_entries;
+   int stack_size;
+   int stack_next;
+
+   char *start;
+   char *end;
+   STRLEN len;
+
+   char *ptr;
+};
+
+static void decode_free(struct decode *decode) {
+   for(; decode->stack_next; decode->stack_next--) {
+      struct decode_stack_entry *e = &decode->stack_entries[decode->stack_next - 1];
+      if (e->sv)  SvREFCNT_dec(e->sv);
+      if (e->key) SvREFCNT_dec(e->key);
+   }
+   Safefree(decode->stack_entries);
+}
+
+#define decode_height(s) (s->stack_next)
+#define decode_top(s) (&s->stack_entries[s->stack_next - 1])
+#define decode_pop(s) (&s->stack_entries[--s->stack_next])
+
+static void decode_push(struct decode *decode, SV *sv) {
+   if (decode->stack_next == decode->stack_size) {
+      decode->stack_size <<= 1;
+      Renew(decode->stack_entries, decode->stack_size, struct decode_stack_entry);
+   }
+
+   decode->stack_entries[decode->stack_next].sv = sv;
+   decode->stack_entries[decode->stack_next].key = NULL;
+   decode->stack_next++;
+}
+
+#define DECODE_CROAK(msg) { \
+      decode_free(decode); \
+      croak("bdecode error: %s: pos %d, %s", msg, decode->ptr - decode->start, decode->start); \
+   }
+#define OVERFLOW_IF(exp) if (exp) DECODE_CROAK("overflow")
+
+static STRLEN find_num(struct decode *decode, char endchr, int allow_sign) {
+   char *s = decode->ptr;
+   char sign = 0;
+
+   if (s != decode->end && allow_sign && (*s == '+' || *s == '-'))
+      sign = *s++;
+
+   for(; s < decode->end; s++) {
+      if (*s == endchr) {
+         STRLEN len = s - decode->ptr;
+         if (sign && len == 1) 
+            DECODE_CROAK("invalid number");
+         return(len);
+      } else if (!isDIGIT(*s)) 
+         DECODE_CROAK("invalid number");
+   }
+
+   DECODE_CROAK("overflow");
+}
+
+static void push_data(struct decode *decode, SV *data) {
+   if (decode_height(decode)) {
+      struct decode_stack_entry *e = decode_top(decode);
+
+      if (SvTYPE(SvRV(e->sv)) == SVt_PVAV) { /* array */
+         av_push((AV*)SvRV(e->sv), data);
+      } else if (SvTYPE(SvRV(e->sv)) == SVt_PVHV) { /* hash */
+         if (!e->key) {
+            if (SvROK(data)) DECODE_CROAK("dictionary keys must be strings");
+            e->key = data;
+         } else {
+            if (!hv_store_ent((HV*)SvRV(e->sv), e->key, data, 0))
+               SvREFCNT_dec(data);
+            SvREFCNT_dec(e->key);
+            e->key = NULL;
+         }
+      } else {
+         SvREFCNT_dec(data);
+         DECODE_CROAK("this should never happen");
+      }
+   } else {
+      decode_push(decode, data);
+   }
+}
+
+static void pop_data(struct decode *decode) {
+   struct decode_stack_entry *e;
+   
+   if (!decode_height(decode)) DECODE_CROAK("format error");
+
+   e = decode_pop(decode);
+   if (e->key) {
+      SvREFCNT_dec(e->sv);
+      SvREFCNT_dec(e->key);
+      DECODE_CROAK("dictionary key with no value");
+   }
+   push_data(decode, e->sv);
+}
+
+static void _cleanse(SV *sv) {
+   if (SvIOK(sv) && !SvNOK(sv) && !SvPOK(sv)) return;
+   (void)SvIV(sv);
+   SvIOK_only(sv);
+}
+
+static SV* _bdecode(struct decode *decode) {
+   I32 depth = 0;
+   I32 coerce = SvTRUE(get_sv("Convert::Bencode_XS::COERCE", TRUE));
+
+   while(decode->ptr < decode->end) {
+      if (*decode->ptr == 'l') { /* array */
+         decode_push(decode, newRV_noinc((SV*)newAV()));
+         depth++;
+         decode->ptr++;
+      } else if (*decode->ptr == 'd') { /* hash */
+         decode_push(decode, newRV_noinc((SV*)newHV()));
+         depth++;
+         decode->ptr++;
+      } else if (*decode->ptr == 'e') { /* end of hash/array */
+         pop_data(decode);
+         depth--;
+         decode->ptr++;
+      } else if (*decode->ptr == 'i') { /* integer */
+         STRLEN len;
+         SV *n;
+
+         decode->ptr++;
+         len = find_num(decode, 'e', 1);
+         if (!len)
+            DECODE_CROAK("number must have nonzero length");
+
+         n = newSVpvn(decode->ptr, len);
+         if (!coerce) _cleanse(n);
+         push_data(decode, n);
+
+         decode->ptr += len + 1;
+      } else if (isDIGIT(*decode->ptr)) { /* string */
+         STRLEN strlen, numlen = find_num(decode, ':', 0);
+
+         OVERFLOW_IF(decode->ptr + 1 + numlen > decode->end);
+
+         errno = 0;
+         strlen = strtol(decode->ptr, NULL, 10);
+         if (errno)
+            DECODE_CROAK("invalid number");
+
+         decode->ptr += 1 + numlen;
+         OVERFLOW_IF(decode->ptr + strlen > decode->end);
+         push_data(decode, newSVpvn(decode->ptr, strlen));
+
+         decode->ptr += strlen;
+      } else {
+         DECODE_CROAK("bad format");
+      }
+   }
+
+   OVERFLOW_IF(decode->ptr > decode->end);
+
+   if (decode_height(decode) != 1 || depth)
+      DECODE_CROAK("bad format");
+
+   return(decode_pop(decode)->sv);
+}
 
 MODULE = Convert::Bencode_XS		PACKAGE = Convert::Bencode_XS		
 
@@ -145,13 +315,33 @@ bencode(stuff)
     OUTPUT:
         RETVAL
 
+SV*
+bdecode(string)
+   SV *string
+   PROTOTYPE: $
+   CODE:
+      struct decode decode;
+
+      if (!SvPOK(string))
+         croak("bdecode only accepts scalar strings");
+
+      decode.start = SvPV(string, decode.len);
+      decode.end = decode.start + decode.len;
+      decode.ptr = decode.start;
+         
+      decode.stack_next = 0;
+      decode.stack_size = 128;
+      New(0, decode.stack_entries, decode.stack_size, struct decode_stack_entry);
+
+      RETVAL = _bdecode(&decode);
+
+      decode_free(&decode);
+   OUTPUT:
+      RETVAL
+
 void
 cleanse(sv)
     SV * sv
     PROTOTYPE: $
     CODE:
-        if (SvIOK(sv) && !SvNOK(sv) && !SvPOK(sv)) return;
-        (void)SvIV(sv);
-        SvIOK_only(sv);
-
-
+        _cleanse(sv);

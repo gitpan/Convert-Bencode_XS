@@ -1,5 +1,9 @@
 Revision history for Perl extension Convert::Bencode_XS.
 
+0.05  Thu Jun  8 14:33:21 JST 2006
+    - function bdecode totally rewritten in C by Andrew Danforth with
+      clear performance increase
+    
 0.04  Tue Nov 15 14:47:00 JST 2005
     - small changes in Bencode_XS.xs helps compiling under MSVSC
         (thanx to Nilson Santos Figueiredo Junior nilsonsfj@cpan.org)

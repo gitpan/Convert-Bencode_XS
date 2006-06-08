@@ -3,7 +3,7 @@ package Convert::Bencode_XS;
 use 5.006;
 use strict;
 
-our $VERSION = '0.04';
+our $VERSION = '0.05';
 
 use Carp;
 use base qw(Exporter DynaLoader);
@@ -17,80 +17,6 @@ our %EXPORT_TAGS = (
 );
 
 our $COERCE = 1;
-
-
-sub bdecode {
-    local $_ = shift;
-    my @refs;
-    my $depth = 0;
-    while (1) {
-        if (/\G(\d+):/gc) {
-            my $old_pos = pos();
-            _bad_format() if $old_pos + $1 > length;
-            pos() = $old_pos + $1;
-            _push_data(\@refs, substr($_, $old_pos, $1));
-        } elsif (/\Gi([+-]?\d+)e/gc) {
-            my $num = $1;
-            cleanse($num) unless $COERCE;
-            _push_data(\@refs, $num);
-        } elsif (/\Gd/gc) {
-            push @refs, [{}];
-            $depth++;
-        } elsif (/\Gl/gc) {
-            push @refs, [[]];
-            $depth++;
-        } elsif (/\Ge/gc) {
-            $depth--;
-            _pop_data(\@refs);
-        } elsif (/\G$/gc) {
-            last;
-        } else {
-            _bad_format();
-        }
-    }
-    _bad_format() unless @refs == 1 and $depth == 0;
-    return $refs[0];
-}
-
-
-sub _push_data {
-    my ($refs, $data) = @_;
-    if (@$refs) {
-        if (ref($refs->[-1][0]) eq 'ARRAY') {
-            push @{$refs->[-1][0]}, $data;
-        } elsif (ref($refs->[-1][0]) eq 'HASH') {
-            if (@{$refs->[-1]} == 1) {
-                _bad_format('Keys of dictionaries must be strings')
-                    if ref $data;
-                push @{$refs->[-1]}, $data;
-            } elsif (@{$refs->[-1]} == 2) {
-                $refs->[-1][0]{$refs->[-1][1]} = $data;
-                $#{$refs->[-1]} = 0;
-            } else {
-                die "We should never be here!!!";
-            }
-        }
-    } else {
-        $refs->[0] = $data;
-        return 1;
-    }
-    return;
-}
-
-sub _pop_data {
-    my ($refs) = @_;
-    _bad_format() unless @$refs;
-    _bad_format('Key with no value in dictionary') 
-        if ref($refs->[-1][0]) eq 'HASH' and defined $refs->[-1][1];
-    _push_data($refs, pop(@$refs)->[0]);
-}
-
-sub _bad_format {
-    croak sprintf("String isn't correctly bencoded: character %d; %s", 
-        pos($_) || 0, $_[0] || '');
-}
-
-
 
 =head1 NAME
 
@@ -237,7 +163,7 @@ Giulio Motta, E<lt>giulienk@cpan.orgE<gt>
 
 =head1 COPYRIGHT AND LICENSE
 
-Copyright (C) 2003 by Giulio Motta
+Copyright (C) 2003-2006 by Giulio Motta
 
 This library is free software; you can redistribute it and/or modify
 it under the same terms as Perl itself, either Perl version 5.8.1 or,
