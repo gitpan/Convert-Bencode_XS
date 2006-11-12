@@ -64,7 +64,8 @@ static void _bencode(SV *line, SV *stuff, bool coerce, bool hkey) {
     
     if (hkey) {
         pv = SvPV(stuff, len);
-        sv_catpvf(line, "%d:%s", len, pv);
+        sv_catpvf(line, "%d:", len);
+        sv_catpvn(line, pv, len);
         return;
     }
     if (SvIOK(stuff) && !SvNOK(stuff) && !SvPOK(stuff)) {
@@ -117,7 +118,8 @@ static void _bencode(SV *line, SV *stuff, bool coerce, bool hkey) {
     if (coerce && _is_int(pv, len, &offset)) {
         sv_catpvf(line, "i%se", pv + offset);
     } else {
-        sv_catpvf(line, "%d:%s", len, pv);
+        sv_catpvf(line, "%d:", len);
+        sv_catpvn(line, pv, len);
     }
 }
 

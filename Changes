@@ -1,5 +1,9 @@
 Revision history for Perl extension Convert::Bencode_XS.
 
+0.06  Sun Nov 12 18:49:00 AEST 2006
+    - use sv_catpvn instead of sv_catpvf for string values
+        (works with binary data blobs) as reported by many.
+
 0.05  Thu Jun  8 14:33:21 JST 2006
     - function bdecode totally rewritten in C by Andrew Danforth with
       clear performance increase

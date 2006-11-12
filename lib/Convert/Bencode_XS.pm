@@ -3,7 +3,7 @@ package Convert::Bencode_XS;
 use 5.006;
 use strict;
 
-our $VERSION = '0.05';
+our $VERSION = '0.06';
 
 use Carp;
 use base qw(Exporter DynaLoader);

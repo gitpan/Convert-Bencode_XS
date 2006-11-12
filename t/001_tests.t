@@ -2,7 +2,7 @@
 
 # t/001_tests.t - check to make sure its all working
 
-use Test::More tests => 75;
+use Test::More tests => 76;
 
 BEGIN { use_ok( 'Convert::Bencode_XS', qw(:all) ); }
 
@@ -162,3 +162,4 @@ is( bencode('0:0:'), '4:0:0:' );
 eval { bencode({sub => sub{print "Heila!\n"}}) };
 ok($@, "We should croak here: invalid format");
 
+is ( length bencode({ join("", map chr($_), 0..255) => join("", map chr($_), 0..255) }), 1 + 4 + 256 + 4 + 256 + 1 );
